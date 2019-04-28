@@ -1,0 +1,223 @@
+Pick a time series of your choosing. Then analyze using techniques you have learned in this course and others. Discuss at least three models and evaluate their performance. Upload to either RPubs or GitHub.
+
+For this analysis I used the Monthly Consumer Price Index of Canada from 1950 to 1973. The Consumer Price Index (CPI) measures price level changes in the market from a consumer basket of goods. It is an extremely important indicator for an economy, as it can be used to measure inflation in an economy. The data provided here is from our Hyndman textbook data site (https://datamarket.com/data/set/22vg/monthly-cpi-canada-1950-1973#!ds=22vg&display=line.. ).
+
+For model evaluation, data was broken into a training and test sets in order to measure accuracy through RMSE, MAE, MPE, MAPE, MASE, and ME. The training set accounted for 80% of the data. The remaining 20% of the data was used as a test set.
+
+Three different models were constructed in order to find the best-fit model for forecasting Canada’s monthly CPI. This included ARIMA, Neural Net, and a seasonally adjusted ETS model.
+library(forecast)
+## Warning: package 'forecast' was built under R version 3.4.2
+## Warning in as.POSIXlt.POSIXct(Sys.time()): unknown timezone 'zone/tz/2018c.
+## 1.0/zoneinfo/America/New_York'
+library(fpp)
+## Loading required package: fma
+## Loading required package: expsmooth
+## Loading required package: lmtest
+## Loading required package: zoo
+## 
+## Attaching package: 'zoo'
+## The following objects are masked from 'package:base':
+## 
+##     as.Date, as.Date.numeric
+## Loading required package: tseries
+library(readr)
+library(caret)
+## Warning: package 'caret' was built under R version 3.4.3
+## Loading required package: lattice
+## Loading required package: ggplot2
+library(neuralnet)
+
+cpi_data <- read_csv("~/Desktop/monthly-cpi-canada.csv")
+## Parsed with column specification:
+## cols(
+##   Month = col_character(),
+##   `Monthly CPI` = col_double()
+## )
+CPI ranges from 77.5 to 156.4 in the data set. The average being 106.2, with a median of 100.4
+
+Through decomposition and time series plots, there is clear evidence of an increasing trend. As time progresses, the CPI does as well. There is also evidence of seasonality within the data.
+
+summary(cpi_data)
+##     Month            Monthly CPI   
+##  Length:288         Min.   : 77.5  
+##  Class :character   1st Qu.: 90.6  
+##  Mode  :character   Median :100.4  
+##                     Mean   :106.2  
+##                     3rd Qu.:117.7  
+##                     Max.   :156.4
+cpi.ts=ts(cpi_data$`Monthly CPI`, frequency = 12  ,start=c(1950, 01))
+plot(cpi.ts, ylab="Monthly CPI", main="Monthly CPI, Canada, 1950-1973")
+
+#seperate series into 80% training set and 20% test set
+#training set
+train<-cpi_data[1:230,]
+cpi.train=ts(train$`Monthly CPI`, frequency = 12  ,start=c(1950, 01))
+plot(cpi.train, ylab="Monthly CPI", main="Monthly CPI, Canada, Jan 1950 - Feb 1969")
+#test set
+test<-cpi_data[231:288,]
+cpi.test=ts(test$`Monthly CPI`, frequency = 12  ,start=c(1969, 03))
+plot(cpi.test, ylab="Monthly CPI", main="Monthly CPI, Canada, Mar 1969 - Dec 1973")
+#Decompose
+plot(decompose(cpi.train))
+#see seasonality and a upward positive trend
+
+acf(cpi.train)
+pacf(cpi.train)
+The ARIMA is an ARIMA (2,1,3)(2,0,1)[12] with drift, constructed through auto.arima(). The model given shows a normal distribution and randomness among the residuals. The forecast shows an increasing trend.
+#Model 1: ARIMA(2,1,3)(2,0,1)[12] with drift
+fit1<-auto.arima(cpi.train, seasonal = TRUE)
+fit1
+## Series: cpi.train 
+## ARIMA(2,1,3)(2,0,1)[12] with drift 
+## 
+## Coefficients:
+##          ar1     ar2      ma1      ma2      ma3    sar1    sar2     sma1
+##       0.6353  0.2372  -0.3014  -0.2261  -0.0784  0.7171  0.1166  -0.5728
+## s.e.  0.7678  0.6794   0.7638   0.4408   0.0945  0.1826  0.1028   0.1800
+##        drift
+##       0.2511
+## s.e.  0.1251
+## 
+## sigma^2 estimated as 0.0872:  log likelihood=-43.06
+## AIC=106.13   AICc=107.14   BIC=140.47
+f.arima=forecast(fit1, h=58)
+plot(f.arima, xlab="Time" ,ylab="Monthly CPI")
+accuracy(f.arima, cpi.test)
+##                        ME      RMSE       MAE          MPE      MAPE
+## Training set -0.005729974 0.2888066 0.2190044 -0.006340474 0.2264987
+## Test set      4.825944054 6.5045748 4.8259441  3.370667305 3.3706673
+##                   MASE        ACF1 Theil's U
+## Training set 0.0910604 0.001234429        NA
+## Test set     2.0065913 0.917558927  7.967242
+#Model 1: Residuals
+hist(residuals(f.arima))
+plot(residuals(f.arima))
+Neural Net
+The Neural Net model is a NNAR(1,1,2)[12]. This model’s forecast seem to flatten out a bit after 1970. This model also has randomness and a normal distribution among the residuals.
+
+#Model 2: NNAR(1,1,2)[12] 
+fit2=nnetar(cpi.train)
+summary(fit2)
+f.nnetar=forecast(fit2, h=58)
+plot(f.nnetar,xlab="Time" ,ylab="Monthly CPI")
+accuracy(f.nnetar,cpi.test)
+##                         ME       RMSE       MAE          MPE      MAPE
+## Training set -0.0001981261  0.2895272 0.2283381 -0.001123261 0.2329504
+## Test set      9.9705659845 12.7378920 9.9705660  6.989865489 6.9898655
+##                    MASE      ACF1 Theil's U
+## Training set 0.09494125 0.2248405        NA
+## Test set     4.14568641 0.9328266  15.76631
+#Model 2: Residuals
+hist(residuals(f.nnetar))
+plot(residuals(f.nnetar))
+STL + ETS(A,Ad,N)
+The last model was a STL + ETS(A,Ad,N) model. Box Cox transformation was used to accurately obtain a lambda. With the inclusion of the lambda, data was transformed prior to forecasts and then transformed back after. Forecasts showed similar patterns of the neural nets, as forecasts flattened out.
+
+#Model 3:STL +  ETS(A,Ad,N)
+lambda <- BoxCox.lambda(cpi.train)
+lambda
+## [1] 1.86895
+fit3<-stlf(cpi.train, method="ets", lambda = lambda,  h=58)
+summary(fit3)
+## 
+## Forecast method: STL +  ETS(A,Ad,N)
+## 
+## Model Information:
+## ETS(A,Ad,N) 
+## 
+## Call:
+##  ets(y = x, model = etsmodel, allow.multiplicative.trend = allow.multiplicative.trend) 
+## 
+##   Smoothing parameters:
+##     alpha = 0.9999 
+##     beta  = 0.2902 
+##     phi   = 0.9653 
+## 
+##   Initial states:
+##     l = 1781.4394 
+##     b = 27.2396 
+## 
+##   sigma:  12.0817
+## 
+##      AIC     AICc      BIC 
+## 2408.936 2409.313 2429.565 
+## 
+## Error measures:
+##                      ME      RMSE       MAE        MPE      MAPE
+## Training set 0.01943736 0.2279394 0.1683098 0.01919784 0.1739816
+##                    MASE       ACF1
+## Training set 0.06998195 0.03371825
+## 
+## Forecasts:
+##          Point Forecast    Lo 80    Hi 80    Lo 95    Hi 95
+## Mar 1969       122.6933 122.4560 122.9301 122.3303 123.0553
+## Apr 1969       123.2590 122.8750 123.6419 122.6713 123.8442
+## May 1969       123.3393 122.8085 123.8681 122.5267 124.1473
+## Jun 1969       123.7341 123.0537 124.4113 122.6921 124.7685
+## Jul 1969       124.3123 123.4786 125.1410 123.0354 125.5779
+## Aug 1969       124.5004 123.5068 125.4872 122.9779 126.0068
+## Sep 1969       124.4199 123.2594 125.5710 122.6413 126.1766
+## Oct 1969       124.4256 123.0944 125.7445 122.3846 126.4379
+## Nov 1969       124.6748 123.1712 126.1627 122.3688 126.9443
+## Dec 1969       124.9879 123.3097 126.6467 122.4132 127.5173
+## Jan 1970       125.1507 123.2934 126.9844 122.3002 127.9459
+## Feb 1970       125.1946 123.1538 127.2068 122.0616 128.2609
+## Mar 1970       125.1969 122.9697 127.3903 121.7763 128.5382
+## Apr 1970       125.6670 123.2589 128.0356 121.9675 129.2742
+## May 1970       125.6632 123.0648 128.2156 121.6698 129.5491
+## Jun 1970       125.9718 123.1876 128.7036 121.6914 130.1295
+## Jul 1970       126.4643 123.4973 129.3720 121.9013 130.8885
+## Aug 1970       126.5756 123.4174 129.6667 121.7168 131.2774
+## Sep 1970       126.4247 123.0683 129.7053 121.2590 131.4131
+## Oct 1970       126.3612 122.8075 129.8301 120.8896 131.6342
+## Nov 1970       126.5404 122.7949 130.1921 120.7713 132.0895
+## Dec 1970       126.7853 122.8496 130.6177 120.7212 132.6073
+## Jan 1971       126.8842 122.7543 130.9006 120.5184 132.9839
+## Feb 1971       126.8678 122.5400 131.0709 120.1944 133.2492
+## Mar 1971       126.8124 122.2852 131.2032 119.8287 133.4767
+## Apr 1971       127.2217 122.5104 131.7860 119.9515 134.1474
+## May 1971       127.1642 122.2536 131.9152 119.5834 134.3710
+## Jun 1971       127.4180 122.3193 132.3452 119.5440 134.8901
+## Jul 1971       127.8558 122.5767 132.9520 119.7006 135.5821
+## Aug 1971       127.9180 122.4454 133.1944 119.4605 135.9153
+## Sep 1971       127.7220 122.0458 133.1870 118.9462 136.0025
+## Oct 1971       127.6143 121.7380 133.2643 118.5254 136.1725
+## Nov 1971       127.7487 121.6830 133.5740 118.3631 136.5699
+## Dec 1971       127.9499 121.6984 133.9466 118.2735 137.0284
+## Jan 1972       128.0078 121.5651 134.1803 118.0314 137.3499
+## Feb 1972       127.9526 121.3140 134.3046 117.6686 137.5636
+## Mar 1972       127.8601 121.0241 134.3922 117.2660 137.7408
+## Apr 1972       128.2304 121.2206 134.9218 117.3635 138.3498
+## May 1972       128.1384 120.9328 135.0078 116.9631 138.5240
+## Jun 1972       128.3568 120.9722 135.3894 116.9000 138.9865
+## Jul 1972       128.7595 121.2071 135.9452 117.0388 139.6184
+## Aug 1972       128.7901 121.0511 136.1445 116.7751 139.9011
+## Sep 1972       128.5650 120.6258 136.0994 116.2335 139.9445
+## Oct 1972       128.4287 120.2945 136.1380 115.7889 140.0691
+## Nov 1972       128.5343 120.2199 136.4054 115.6098 140.4162
+## Dec 1972       128.7072 120.2180 136.7355 115.5062 140.8237
+## Jan 1973       128.7386 120.0670 136.9299 115.2487 141.0981
+## Feb 1973       128.6584 119.7981 137.0175 114.8692 141.2677
+## Mar 1973       128.5418 119.4911 137.0697 114.4502 141.4023
+## Apr 1973       128.8869 119.6771 137.5571 114.5434 141.9597
+## May 1973       128.7725 119.3742 137.6091 114.1291 142.0927
+## Jun 1973       128.9681 119.4034 137.9526 114.0604 142.5084
+## Jul 1973       129.3481 119.6312 138.4682 114.1991 143.0906
+## Aug 1973       129.3581 119.4645 138.6338 113.9276 143.3318
+## Sep 1973       129.1142 119.0262 138.5593 113.3731 143.3392
+## Oct 1973       128.9594 118.6838 138.5679 112.9184 143.4267
+## Nov 1973       129.0462 118.6019 138.8024 112.7359 143.7329
+## Dec 1973       129.2008 118.5942 139.0994 112.6315 144.0989
+plot(fit3,xlab="Time" ,ylab="Monthly CPI")
+accuracy(fit3,cpi.test)
+##                      ME       RMSE       MAE        MPE      MAPE
+## Training set 0.01943736  0.2279394 0.1683098 0.01919784 0.1739816
+## Test set     9.15269798 11.7245170 9.1526980 6.41538976 6.4153898
+##                    MASE       ACF1 Theil's U
+## Training set 0.06998195 0.03371825        NA
+## Test set     3.80562304 0.93160502  14.49565
+#Model 4: Residuals
+hist(residuals(fit3))
+plot(residuals(fit3))
+Conclusion
+All in all, the ARIMA (2,1,3)(2,0,1)[12] with drift preformed best. It had lowest RMSE, MAE, MPE, MAPE, MASE, and ME statistics when applied to the training set. The Neural Net and STL + ETS model were very similar.When comparing the model to the actual test set, the ARIMA model shows clear evidence of an increasing CPI. This accurately depicts the test data more so than the other model predictions.
